@@ -1,0 +1,33 @@
+{
+  "name": "@acentric-llm/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "One complete() for many LLM providers, with each provider's native features. Calls the acentric LLM gateway, or providers directly. Bring your own keys.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./direct": {
+      "source": "./src/direct.ts",
+      "types": "./dist/direct.d.ts",
+      "default": "./dist/direct.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc -p tsconfig.json && tsc -p tsconfig.build.json --noEmit",
+    "test": "node --conditions=source --test \"test/**/*.test.ts\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@acentric-llm/contracts": "workspace:*",
+    "@acentric-llm/providers": "workspace:*"
+  }
+}

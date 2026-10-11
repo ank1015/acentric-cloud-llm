@@ -1,0 +1,22 @@
+{
+  "name": "@acentric-llm/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The acentric LLM gateway: one Cloudflare Worker in front of every provider. Stateless; callers bring their own credentials.",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter \"@acentric-llm/gateway^...\" build && wrangler dev",
+    "deploy": "pnpm --filter \"@acentric-llm/gateway^...\" build && wrangler deploy",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "check": "tsc -p tsconfig.json",
+    "test": "node --conditions=source --test \"test/**/*.test.ts\"",
+    "clean": "rm -rf dist .wrangler"
+  },
+  "dependencies": {
+    "@acentric-llm/contracts": "workspace:*",
+    "@acentric-llm/providers": "workspace:*"
+  },
+  "devDependencies": {
+    "wrangler": "4.144.0"
+  }
+}
