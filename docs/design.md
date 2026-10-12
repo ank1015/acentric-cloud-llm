@@ -72,7 +72,10 @@ message from another provider is refused, by the types and by the gateway.
 A message from another model of the same provider is passed through as is,
 since some providers accept it, and the provider refuses it if it must.
 Encrypted reasoning and signatures are often tied to the model, so the
-conversion helpers (D13) are the safe path whenever the model changes.
+conversion helpers (D13) are the safe path whenever the model changes. The
+one exception is Anthropic, where signed thinking from another model never
+errors but is read by some models and silently ignored by others: its
+adapter leaves another model's thinking blocks out and replays the rest.
 
 **D3. Two kinds of system instructions.** `instructions` on the request is the
 provider's top-level system field (OpenAI `instructions`, Anthropic `system`,
@@ -143,16 +146,22 @@ request works as is.
 
 **D10. API formats are separate from providers.** An adapter implements one
 API format (OpenAI Responses, Anthropic Messages, Gemini generateContent,
-later OpenAI Chat Completions). A provider is a profile on a format: base
+later OpenAI Chat Completions). Each format has its own profile shape: the
+Messages profile is only a URL, credentials and headers, since Anthropic is
+its one provider so far. A provider is a profile on a format: base
 URL, credentials and headers, fields it forbids or requires, capability
 flags (file parts, file IDs, custom tools), and small hooks for what is really
-its own (reading errors, the price multiplier). Native item types are the
+its own (reading errors, the price multiplier or the cost it reports, fields
+it reports on output but refuses on input). Native item types are the
 format's, extended by the provider. One provider ID uses one API format; a
 provider reachable through two formats gets two IDs.
 
 **D11. Any model ID is accepted.** The catalog is metadata (name, limits,
 modalities, pricing) used for autocomplete and cost. A model missing from it
 works, without a cost estimate. New models need no gateway or SDK release.
+For a gateway provider with hundreds of models (OpenRouter) the catalog is
+curated: only the models we use there, which have no provider of their own
+here.
 
 ### Conversion, errors, usage
 
@@ -162,10 +171,17 @@ rest from the status and the output items, and always keeps the provider's
 own reason in `providerStopReason`.
 
 **D13. Conversion between providers is client-side and explicit.**
-`convert(messages, { to: { provider, api, model }, ...policy })` returns the
-messages for the target and a report of what was dropped or changed. What to
-keep or drop depends on the source and target pair and is decided per pair
-as providers are implemented.
+`convert(messages, { provider, model }, { reasoning })` returns the
+conversation for the target and a record of every change it made. It works
+on the whole conversation, since tool call IDs and the results that answer
+them change together. Assistant messages for the target's own provider and
+model are kept; another provider or model in the same API format is filtered
+(the fast path); another format goes through a provider-neutral form that is
+never stored (the hub): each format reads into it and writes from it, so a
+new format adds one converter, not one per pair. Reasoning bound to a model
+is dropped, or kept as text by policy; provider items are dropped; options
+other providers own are stripped from shared parts and never translated.
+See [conversion.md](conversion.md).
 
 **D14. Errors are structured.** One `LlmError` with a `kind`, a `retryable`
 flag, the provider's code, type, param and error body, its HTTP status,
@@ -198,17 +214,22 @@ request field at fault (`providerParam`) when the error itself does not.
 
 **D15. The response envelope is small and never duplicates.** The assistant
 message, the response ID, the requested and the provider-reported model, a
-stop reason and the provider's own stop reason, usage with an estimated cost
-when the model is in the catalog, timing, and `native`: the provider's
+stop reason and the provider's own stop reason, usage with a cost, timing,
+and `native`: the provider's
 response fields that say something new, such as an Anthropic container or
 the OpenAI service tier actually used. `native` leaves out the output (it is
 the message), everything already in the envelope, and every echo of the
 request (instructions, tools, sampling and caching settings): a long
 conversation would otherwise store its instructions and tools once per turn.
 
-Cost covers tokens only, at the catalog's standard rates, adjusted for a
-service tier only where the multiplier is documented; otherwise it is
-omitted. When the response does not say which tier served it, a request for
+A provider that reports what it charged (OpenRouter, whose price depends on
+the endpoint that served the request) gives the cost: `source: "reported"`,
+usually a total only. Otherwise the cost is estimated (`source:
+"estimated"`): tokens only, at the catalog's standard rates, adjusted for a
+service tier only where the multiplier is documented, and omitted when the
+model is not in the catalog. Where a provider prices cache writes by time to live (Anthropic),
+the catalog has a separate one-hour rate; `usage.cacheWrite` and
+`cost.cacheWrite` still hold every write together. When the response does not say which tier served it, a request for
 a tier other than the default gets no estimate. Per-call fees for hosted tools are not estimated.
 
 ### Shape of the code
@@ -238,7 +259,8 @@ shell domain secrets): the gateway never logs request bodies.
 ## How we add a provider
 
 One at a time, in order: **OpenAI** (done), **Fireworks** (done),
-**Anthropic, Google Gemini.** For each:
+**Anthropic** (done), **OpenRouter** (done, for models without a provider
+of their own), **Google Gemini.** For each:
 
 1. Research the provider's current docs and API reference: request fields,
    output items, what must be replayed and how, state (`store`, previous
@@ -246,9 +268,9 @@ One at a time, in order: **OpenAI** (done), **Fireworks** (done),
 2. Write a short research note in `docs/providers/<provider>.md`, with
    source links and the date verified.
 3. Write its native types in `packages/contracts`.
-4. Implement the adapter or profile and the extractors. Conversion between
-   providers (D13) is designed once Anthropic and Gemini are in: per format,
-   per provider pair, or through a common form.
+4. Implement the adapter or profile and the extractors, and add the
+   provider to conversion (D13): its capabilities and option keys, and a
+   converter for a new API format.
 5. Test against recorded responses; check live with a real key.
 
 ## Tooling
@@ -266,4 +288,5 @@ compiling test files that include expected errors.
 - A license before publishing.
 - Provider request headers. Fireworks' `x-session-affinity` and
   `x-prompt-cache-isolation-key` are headers; `prompt_cache_key` in the body
-  covers affinity for now.
+  covers affinity for now. Anthropic's `anthropic-beta` header has its own
+  option, `providerOptions.betas`, which the adapter moves into the header.

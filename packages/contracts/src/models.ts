@@ -7,7 +7,10 @@ export interface ModelCost {
   readonly input: number;
   readonly output: number;
   readonly cacheRead?: number;
+  /** Writing to the cache, at the provider's default time to live. */
   readonly cacheWrite?: number;
+  /** Writing to the cache for an hour, where the provider prices it apart (Anthropic). */
+  readonly cacheWrite1h?: number;
 }
 
 export interface ModelPricing {

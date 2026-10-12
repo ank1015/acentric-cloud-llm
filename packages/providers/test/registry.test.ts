@@ -4,8 +4,8 @@ import { LlmError } from '@acentric-llm/contracts';
 import { estimateCost, parseCompletionRequest, PROVIDERS, MODELS } from '../src/index.ts';
 
 test('every provider has a definition and a catalog', () => {
-  assert.deepEqual(Object.keys(PROVIDERS), ['openai', 'fireworks']);
-  for (const provider of ['openai', 'fireworks'] as const) {
+  assert.deepEqual(Object.keys(PROVIDERS), ['openai', 'fireworks', 'anthropic', 'openrouter']);
+  for (const provider of ['openai', 'fireworks', 'anthropic', 'openrouter'] as const) {
     assert.equal(PROVIDERS[provider].provider, provider);
     assert.ok(MODELS[provider].length > 0);
     for (const model of MODELS[provider]) assert.equal(model.provider, provider);

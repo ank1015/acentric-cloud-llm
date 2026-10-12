@@ -8,14 +8,30 @@ import type {
   RequestMessage,
   ToolCall,
 } from '@acentric-llm/contracts';
+import * as messages from './formats/anthropic/extract.ts';
 import * as responses from './formats/responses/extract.ts';
 
 export type { TextOptions } from './formats/responses/extract.ts';
 
-function format(message: AssistantMessage): 'openai-responses' {
+/** One format's extractors, over any message of that format. */
+interface Extractors {
+  outputText(message: AssistantMessage, options?: responses.TextOptions): string;
+  refusals(message: AssistantMessage): readonly string[];
+  reasoningSummary(message: AssistantMessage): readonly string[];
+  toolCalls(message: AssistantMessage): readonly ToolCall[];
+  pendingToolCalls(message: AssistantMessage): readonly ToolCall[];
+}
+
+const FORMATS = {
+  'openai-responses': responses as unknown as Extractors,
+  'anthropic-messages': messages as unknown as Extractors,
+};
+
+function format(message: AssistantMessage): Extractors {
   switch (message.api) {
     case 'openai-responses':
-      return message.api;
+    case 'anthropic-messages':
+      return FORMATS[message.api];
     default:
       throw new TypeError(
         `No extractor for the ${String((message as { api?: unknown }).api)} format.`,
@@ -23,36 +39,38 @@ function format(message: AssistantMessage): 'openai-responses' {
   }
 }
 
-/** The text of the message's answer. Commentary is left out unless `{ phase: "all" }`. */
+/**
+ * The text of the message's answer. For the Responses format, commentary is
+ * left out unless `{ phase: "all" }`.
+ */
 export function outputText(message: AssistantMessage, options?: responses.TextOptions): string {
-  format(message);
-  return responses.outputText(message, options);
+  return format(message).outputText(message, options);
 }
 
+/** Refusal texts. Anthropic reports refusals as a stop reason, so its messages have none. */
 export function refusals(message: AssistantMessage): readonly string[] {
-  format(message);
-  return responses.refusals(message);
+  return format(message).refusals(message);
 }
 
+/** Reasoning summaries or thinking texts, in order. */
 export function reasoningSummary(message: AssistantMessage): readonly string[] {
-  format(message);
-  return responses.reasoningSummary(message);
+  return format(message).reasoningSummary(message);
 }
 
 /** Every call in the message the caller answers. */
 export function toolCalls<P extends Provider>(
   message: AssistantMessage<P>,
 ): readonly ToolCall<P>[] {
-  format(message);
-  return responses.toolCalls(message as never) as unknown as readonly ToolCall<P>[];
+  const any = message as AssistantMessage;
+  return format(any).toolCalls(any) as unknown as readonly ToolCall<P>[];
 }
 
 /** Calls the caller still has to answer. */
 export function pendingToolCalls<P extends Provider>(
   message: AssistantMessage<P>,
 ): readonly ToolCall<P>[] {
-  format(message);
-  return responses.pendingToolCalls(message as never) as unknown as readonly ToolCall<P>[];
+  const any = message as AssistantMessage;
+  return format(any).pendingToolCalls(any) as unknown as readonly ToolCall<P>[];
 }
 
 /** The messages a provider receives: the application's own `custom` messages removed. */

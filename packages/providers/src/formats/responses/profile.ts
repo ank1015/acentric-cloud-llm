@@ -6,7 +6,9 @@ import type {
   ModelInfo,
   NativeResponse,
   Provider,
+  UsageCost,
 } from '@acentric-llm/contracts';
+import type { JsonRecord } from '../../shared.ts';
 
 /** Providers served through the Responses format. */
 export type ResponsesProvider = {
@@ -39,20 +41,48 @@ export interface ResponsesProfile<P extends ResponsesProvider> {
   readonly customTools: boolean;
   /** Response fields that only echo the request, left out of `native`. */
   readonly echoFields: readonly string[];
+  /** Fields the provider reports on output items but refuses on input; left out on replay. */
+  readonly outputOnlyFields: readonly string[];
+  /**
+   * Which model an assistant message records: the requested one, or the one
+   * the response names, where routing (aliases, fallback lists) may pick
+   * another model that the replayed reasoning then belongs to.
+   */
+  readonly messageModel: 'request' | 'response';
   readonly catalog: readonly ModelInfo<P>[];
-  /** The price multiplier for the tier that served the response, or undefined when unknown. */
-  priceMultiplier(native: NativeResponse<P>, request: CompletionRequest<P>): number | undefined;
+  /**
+   * The cost the provider reports it charged, read from its raw `usage`.
+   * When present, it replaces the catalog estimate.
+   */
+  reportedCost?(usage: JsonRecord): UsageCost | undefined;
+  /**
+   * The price multiplier for the tier that served the response, or undefined
+   * when unknown. Without it (or `reportedCost`) there is no cost.
+   */
+  priceMultiplier?(native: NativeResponse<P>, request: CompletionRequest<P>): number | undefined;
   /** A provider-specific reading of an error the format does not recognize. */
-  classifyError?(error: {
-    status?: number;
-    code?: string;
-    type?: string;
-    message?: string;
-  }): ErrorReading | undefined;
+  classifyError?(error: ErrorInput): ErrorReading | undefined;
 }
 
-/** What an error means: its kind, and the request field at fault when the error does not name it. */
+/** What a profile sees of an error. */
+export interface ErrorInput {
+  /** The HTTP status; absent for a failed response that arrived with HTTP 200. */
+  readonly status?: number;
+  readonly code?: string;
+  readonly type?: string;
+  readonly message?: string;
+  /** The error's `metadata`, where the provider adds one. */
+  readonly metadata?: JsonRecord;
+  /** A canonical error category beside the error object (OpenRouter's `error_type`). */
+  readonly errorType?: string;
+}
+
+/**
+ * What an error means: its kind, the request field at fault when the error
+ * does not name it, and a better message when the error's own is generic.
+ */
 export interface ErrorReading {
   readonly kind: LlmErrorKind;
   readonly param?: string;
+  readonly message?: string;
 }

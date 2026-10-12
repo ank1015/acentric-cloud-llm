@@ -185,7 +185,7 @@ test('refuses what Fireworks would drop or never use', async () => {
     {
       tools: [{ type: 'custom', name: 'patch', description: 'Apply a patch.' }],
     },
-    /custom tool; Fireworks accepts custom tools but its models never call them/,
+    /custom tool; Fireworks takes no custom tools here/,
   );
   await refused(
     {
@@ -216,7 +216,7 @@ test('refuses what Fireworks would drop or never use', async () => {
         { role: 'user', content: [{ type: 'image', source: { type: 'file_id', id: 'file_1' } }] },
       ],
     },
-    /file ID; Fireworks has no file storage/,
+    /file ID; Fireworks takes no file IDs here/,
   );
   await refused(
     { messages: [assistant([{ type: 'reasoning', id: 'rs_1', summary: [] }])] as never },

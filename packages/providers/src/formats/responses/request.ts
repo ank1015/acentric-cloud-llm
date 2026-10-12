@@ -103,7 +103,9 @@ function buildItems<P extends ResponsesProvider>(
           `${where} is a ${String(message.provider)} assistant message; convert it before sending it to ${profile.label}.`,
         );
       }
-      return nativeItems(provider, message.content, where).map(stripOutputOnly);
+      return nativeItems(provider, message.content, where).map((item) =>
+        stripOutputOnly(item, profile.outputOnlyFields),
+      );
     case 'native':
       if (message.provider !== provider) {
         throw invalidRequest(
@@ -134,11 +136,10 @@ function nativeItems(provider: string, value: unknown, where: string): readonly 
   return value as JsonRecord[];
 }
 
-/** `created_by` is reported on output items and refused on input. */
-function stripOutputOnly(item: JsonRecord): JsonRecord {
-  if (!('created_by' in item)) return item;
-  const { created_by: _createdBy, ...rest } = item;
-  return rest;
+/** Fields the provider reports on output items and refuses on input. */
+function stripOutputOnly(item: JsonRecord, fields: readonly string[]): JsonRecord {
+  if (!fields.some((field) => field in item)) return item;
+  return Object.fromEntries(Object.entries(item).filter(([key]) => !fields.includes(key)));
 }
 
 const RESULT_OWNED = ['type', 'call_id', 'output'] as const;
@@ -273,7 +274,7 @@ function checkSource<P extends ResponsesProvider>(
       if (!profile.fileIds) {
         throw invalidRequest(
           provider,
-          `${at}.source is a file ID; ${profile.label} has no file storage. Send a URL or base64 data.`,
+          `${at}.source is a file ID; ${profile.label} takes no file IDs here. Send a URL or base64 data.`,
         );
       }
       return source as MediaSource;
@@ -321,7 +322,7 @@ function buildTool<P extends ResponsesProvider>(
     if (!profile.customTools) {
       throw invalidRequest(
         provider,
-        `${where} is a custom tool; ${profile.label} accepts custom tools but its models never call them. Use a function tool.`,
+        `${where} is a custom tool; ${profile.label} takes no custom tools here. Use a function tool.`,
       );
     }
     const fields = refuseOwned(

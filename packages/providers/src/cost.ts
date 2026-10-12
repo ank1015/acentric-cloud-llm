@@ -1,5 +1,11 @@
 import type { ModelCost, ModelPricing, Usage, UsageCost } from '@acentric-llm/contracts';
 
+/** Counts the shared `Usage` does not split. */
+export interface CostDetails {
+  /** The part of `usage.cacheWrite` written for an hour, priced at `cacheWrite1h`. */
+  readonly cacheWrite1h?: number;
+}
+
 /**
  * Estimated token cost in US dollars, or undefined when it cannot be known: an
  * unknown count, or tokens in a bucket the pricing has no rate for. The tier
@@ -9,6 +15,7 @@ export function estimateCost(
   usage: Usage,
   pricing: ModelPricing | undefined,
   multiplier: number | undefined,
+  details: CostDetails = {},
 ): UsageCost | undefined {
   if (pricing === undefined || multiplier === undefined) return undefined;
   const { totalInput, input, output } = usage;
@@ -18,8 +25,15 @@ export function estimateCost(
   for (const tier of pricing.tiers ?? []) if (totalInput > tier.aboveInputTokens) rates = tier.cost;
 
   const cacheRead = bucket(usage.cacheRead, rates.cacheRead);
-  const cacheWrite = bucket(usage.cacheWrite, rates.cacheWrite);
-  if (cacheRead === null || cacheWrite === null) return undefined;
+  const hour = details.cacheWrite1h ?? 0;
+  const written = usage.cacheWrite;
+  if (written !== undefined && hour > written) return undefined;
+  const shortWrite = bucket(written === undefined ? undefined : written - hour, rates.cacheWrite);
+  const hourWrite = bucket(hour, rates.cacheWrite1h);
+  if (cacheRead === null || shortWrite === null || (hour > 0 && hourWrite === null)) {
+    return undefined;
+  }
+  const cacheWrite = hour > 0 ? (shortWrite ?? 0) + (hourWrite ?? 0) : shortWrite;
 
   const cost = {
     input: price(input, rates.input),
@@ -29,9 +43,9 @@ export function estimateCost(
   };
   const scaled = Object.fromEntries(
     Object.entries(cost).map(([key, value]) => [key, value * multiplier]),
-  ) as Omit<UsageCost, 'total'>;
+  ) as Omit<UsageCost, 'total' | 'source'>;
   const total = Object.values(scaled).reduce((sum: number, value) => sum + (value ?? 0), 0);
-  return { ...scaled, total };
+  return { source: 'estimated', ...scaled, total };
 
   /** undefined: no tokens to price; null: tokens without a rate. */
   function bucket(tokens: number | undefined, rate: number | undefined): number | undefined | null {

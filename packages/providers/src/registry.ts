@@ -4,11 +4,15 @@ import {
   type ModelInfo,
   type Provider,
 } from '@acentric-llm/contracts';
+import { ANTHROPIC_MODELS } from './catalog/anthropic.ts';
 import { FIREWORKS_MODELS } from './catalog/fireworks.ts';
 import { OPENAI_MODELS } from './catalog/openai.ts';
+import { OPENROUTER_MODELS } from './catalog/openrouter.ts';
 import type { ProviderDefinition } from './definition.ts';
+import { anthropic } from './providers/anthropic.ts';
 import { fireworks } from './providers/fireworks.ts';
 import { openai } from './providers/openai.ts';
+import { openrouter } from './providers/openrouter.ts';
 import { invalidRequest, isRecord } from './shared.ts';
 import { MAX_TIMEOUT_MS, type CallOptions } from './transport.ts';
 
@@ -16,12 +20,16 @@ import { MAX_TIMEOUT_MS, type CallOptions } from './transport.ts';
 export const PROVIDERS: { readonly [P in Provider]: ProviderDefinition<P> } = {
   openai,
   fireworks,
+  anthropic,
+  openrouter,
 };
 
 /** Every catalog model, by provider. */
 export const MODELS: { readonly [P in Provider]: readonly ModelInfo<P>[] } = {
   openai: OPENAI_MODELS,
   fireworks: FIREWORKS_MODELS,
+  anthropic: ANTHROPIC_MODELS,
+  openrouter: OPENROUTER_MODELS,
 };
 
 export function isProvider(value: unknown): value is Provider {

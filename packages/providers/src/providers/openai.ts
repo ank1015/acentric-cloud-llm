@@ -19,6 +19,9 @@ export const openAiProfile: ResponsesProfile<'openai'> = {
   customTools: true,
   // OpenAI-only echoes of the request, beyond the format's.
   echoFields: ['prompt', 'prompt_cache_retention', 'prompt_cache_options'],
+  // `created_by` is reported on output items and refused on input.
+  outputOnlyFields: ['created_by'],
+  messageModel: 'request',
 
   credentials(value) {
     const fields = credentialFields('openai', 'OpenAI', value);

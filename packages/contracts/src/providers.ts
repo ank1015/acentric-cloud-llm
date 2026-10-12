@@ -1,5 +1,7 @@
+import type { AnthropicSpec } from './providers/anthropic.ts';
 import type { FireworksSpec } from './providers/fireworks.ts';
 import type { OpenAiSpec } from './providers/openai.ts';
+import type { OpenRouterSpec } from './providers/openrouter.ts';
 
 /**
  * An API format: one request and response shape that several providers may
@@ -32,6 +34,8 @@ export interface ProviderSpec {
 export interface Providers {
   readonly openai: OpenAiSpec;
   readonly fireworks: FireworksSpec;
+  readonly anthropic: AnthropicSpec;
+  readonly openrouter: OpenRouterSpec;
 }
 
 /** Fails to compile when a registered provider does not satisfy `ProviderSpec`. */

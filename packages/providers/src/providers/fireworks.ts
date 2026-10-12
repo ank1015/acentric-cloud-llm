@@ -15,6 +15,9 @@ export const fireworksProfile: ResponsesProfile<'fireworks'> = {
   customTools: false,
   // Fireworks echoes the requested reasoning settings; it reports nothing new there.
   echoFields: ['reasoning'],
+  // As for OpenAI: reported on output items, not taken back.
+  outputOnlyFields: ['created_by'],
+  messageModel: 'request',
 
   credentials(value) {
     const fields = credentialFields('fireworks', 'Fireworks', value);

@@ -70,7 +70,13 @@ export async function postJson(request: PostRequest): Promise<JsonAnswer> {
       signal: controller.signal,
       redirect: 'manual',
     });
-    requestId = response.headers.get('x-request-id')?.trim() || undefined;
+    // OpenRouter has no request ID header; its generation ID names the call.
+    requestId =
+      (
+        response.headers.get('x-request-id') ??
+        response.headers.get('request-id') ??
+        response.headers.get('x-generation-id')
+      )?.trim() || undefined;
     if (response.status >= 300 && response.status < 400) {
       void response.body?.cancel().catch(() => {});
       throw new LlmError(`${label} redirects are not followed.`, {

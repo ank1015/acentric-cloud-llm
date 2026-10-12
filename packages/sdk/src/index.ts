@@ -8,6 +8,11 @@ export {
   pendingToolCalls,
   requestMessages,
   toolResult,
+  convert,
+  type Conversion,
+  type ConversionChange,
+  type ConvertOptions,
+  type ConvertTarget,
   type TextOptions,
   type ToolResultOptions,
 } from '@acentric-llm/providers';

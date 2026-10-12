@@ -3,6 +3,7 @@ import {
   type CompletionRequest,
   type CompletionResponse,
   type Usage,
+  type UsageCost,
 } from '@acentric-llm/contracts';
 import { estimateCost } from '../../cost.ts';
 import { invalidResponse, isRecord, tokenCount, type JsonRecord } from '../../shared.ts';
@@ -52,14 +53,18 @@ export function parseResponse<P extends ResponsesProvider>(
 ): CompletionResponse<P> {
   const { provider, label } = profile;
   const body = answer.body;
-  if (!isRecord(body) || body.object !== 'response' || !Array.isArray(body.output)) {
+  if (!isRecord(body)) {
     throw invalidResponse(provider, `${label} did not answer with a response object.`, body);
   }
   const id = typeof body.id === 'string' && body.id ? body.id : undefined;
   const usage = isRecord(body.usage) ? readUsage(body.usage) : undefined;
 
+  // A failure can arrive with HTTP 200, as a failed response or a bare error body.
   if (body.status === 'failed' || (body.error !== null && body.error !== undefined)) {
-    throw failedResponseError(profile, body.error, id, usage);
+    throw failedResponseError(profile, body, id, usage);
+  }
+  if (body.object !== 'response' || !Array.isArray(body.output)) {
+    throw invalidResponse(provider, `${label} did not answer with a response object.`, body);
   }
   if (body.status === 'cancelled') {
     throw new LlmError(`${label} cancelled the response.`, {
@@ -80,10 +85,16 @@ export function parseResponse<P extends ResponsesProvider>(
     isRecord(body.incomplete_details) && typeof body.incomplete_details.reason === 'string'
       ? body.incomplete_details.reason
       : undefined;
-  const native = omit(body, [...FORMAT_ECHO_FIELDS, ...profile.echoFields]);
-  const model = profile.catalog.find((info) => info.id === request.model || info.id === body.model);
-  const cost =
-    usage && estimateCost(usage, model?.pricing, profile.priceMultiplier(native as never, request));
+  const extras = isRecord(body.usage) ? usageExtras(body.usage) : undefined;
+  const native = {
+    ...omit(body, [...FORMAT_ECHO_FIELDS, ...profile.echoFields]),
+    ...(extras !== undefined ? { usage: extras } : {}),
+  };
+  const cost = usage && readCost(usage, body, native, request, profile);
+  const messageModel =
+    profile.messageModel === 'response' && typeof body.model === 'string' && body.model
+      ? body.model
+      : request.model;
 
   return {
     ...(id !== undefined ? { id } : {}),
@@ -96,7 +107,7 @@ export function parseResponse<P extends ResponsesProvider>(
       role: 'assistant',
       provider,
       api: 'openai-responses',
-      model: request.model,
+      model: messageModel,
       ...(id !== undefined ? { id } : {}),
       timestamp: answer.timestamp,
       content: body.output,
@@ -108,6 +119,47 @@ export function parseResponse<P extends ResponsesProvider>(
     durationMs: answer.durationMs,
     timestamp: answer.timestamp,
   } as unknown as CompletionResponse<P>;
+}
+
+/** The provider's reported cost where it has one, otherwise the catalog estimate. */
+function readCost<P extends ResponsesProvider>(
+  usage: Usage,
+  body: JsonRecord,
+  native: JsonRecord,
+  request: CompletionRequest<P>,
+  profile: ResponsesProfile<P>,
+): UsageCost | undefined {
+  if (profile.reportedCost) {
+    return isRecord(body.usage) ? profile.reportedCost(body.usage) : undefined;
+  }
+  const model = profile.catalog.find((info) => info.id === request.model || info.id === body.model);
+  const multiplier = profile.priceMultiplier?.(native as never, request);
+  return estimateCost(usage, model?.pricing, multiplier);
+}
+
+/** Token fields `readUsage` maps; anything else in `usage` is kept in `native.usage`. */
+const TOKEN_FIELDS: Readonly<Record<string, readonly string[] | true>> = {
+  input_tokens: true,
+  output_tokens: true,
+  total_tokens: true,
+  input_tokens_details: ['cached_tokens', 'cache_write_tokens'],
+  output_tokens_details: ['reasoning_tokens'],
+};
+
+/** What the provider reports in `usage` beyond the mapped token counts, or undefined. */
+function usageExtras(raw: JsonRecord): JsonRecord | undefined {
+  const extras: JsonRecord = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const mapped = TOKEN_FIELDS[key];
+    if (mapped === true || value === null) continue;
+    if (mapped === undefined || !isRecord(value)) {
+      extras[key] = value;
+      continue;
+    }
+    const rest = omit(value, mapped);
+    if (Object.keys(rest).length) extras[key] = rest;
+  }
+  return Object.keys(extras).length ? extras : undefined;
 }
 
 /** Format usage: `input_tokens` is the total; cache reads and writes are parts of it. */

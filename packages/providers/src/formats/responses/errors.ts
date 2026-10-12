@@ -1,7 +1,7 @@
 import { LlmError, type LlmErrorKind, type Usage } from '@acentric-llm/contracts';
-import { isRecord } from '../../shared.ts';
+import { isRecord, type JsonRecord } from '../../shared.ts';
 import { parseRetryAfter, type HttpAnswer } from '../../transport.ts';
-import type { ResponsesProfile, ResponsesProvider } from './profile.ts';
+import type { ErrorInput, ResponsesProfile, ResponsesProvider } from './profile.ts';
 
 const POLICY_CODES = new Set([
   'bio_policy',
@@ -42,7 +42,8 @@ function kindForCode(code: string | undefined, type: string | undefined): LlmErr
   }
 }
 
-function kindForStatus(status: number): LlmErrorKind {
+/** The kind an HTTP status implies when nothing more specific is known. */
+export function kindForStatus(status: number): LlmErrorKind {
   if (status === 401 || status === 403) return 'auth';
   if (status === 404) return 'not_found';
   if (status === 408) return 'timeout';
@@ -57,6 +58,7 @@ interface ErrorFields {
   readonly code?: string;
   readonly type?: string;
   readonly param?: string;
+  readonly metadata?: JsonRecord;
 }
 
 /**
@@ -83,6 +85,38 @@ function errorFields(detail: unknown): ErrorFields {
     ...(typeof code === 'string' || typeof code === 'number' ? { code: String(code) } : {}),
     ...(typeof detail.type === 'string' ? { type: detail.type } : {}),
     ...(typeof detail.param === 'string' ? { param: detail.param } : {}),
+    ...(isRecord(detail.metadata) ? { metadata: detail.metadata } : {}),
+  };
+}
+
+/**
+ * The profile's reading first, since it knows the provider's own signals
+ * (canonical types, metadata, messages); then the format's codes.
+ */
+function classify<P extends ResponsesProvider>(
+  profile: ResponsesProfile<P>,
+  fields: ErrorFields,
+  input: ErrorInput,
+) {
+  const reading = profile.classifyError?.(input);
+  return { reading, kind: reading?.kind ?? kindForCode(fields.code, fields.type) };
+}
+
+/**
+ * What a profile sees: the error's fields, its metadata (on the error or, for
+ * some validation errors, beside it), and a canonical category beside the
+ * error (Responses) or in its metadata (other formats).
+ */
+function errorInput(fields: ErrorFields, body: unknown, status?: number): ErrorInput {
+  const { param: _param, metadata: own, ...rest } = fields;
+  const metadata = own ?? (isRecord(body) && isRecord(body.metadata) ? body.metadata : undefined);
+  const type =
+    isRecord(body) && body.error_type !== undefined ? body.error_type : metadata?.error_type;
+  return {
+    ...rest,
+    ...(status !== undefined ? { status } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
+    ...(typeof type === 'string' && type ? { errorType: type } : {}),
   };
 }
 
@@ -106,19 +140,19 @@ export function httpError<P extends ResponsesProvider>(
   answer: HttpAnswer,
 ): LlmError {
   const { fields, detail } = readError(answer.body);
-  const formatKind = kindForCode(fields.code, fields.type);
-  const reading =
-    formatKind === undefined
-      ? profile.classifyError?.({ status: answer.status, ...fields })
-      : undefined;
-  const kind = formatKind ?? reading?.kind ?? kindForStatus(answer.status);
+  const { reading, kind } = classify(
+    profile,
+    fields,
+    errorInput(fields, answer.body, answer.status),
+  );
   const param = fields.param ?? reading?.param;
   return new LlmError(
-    fields.message ??
+    reading?.message ??
+      fields.message ??
       (typeof answer.body === 'string' && answer.body ? answer.body : undefined) ??
       `${profile.label} request failed with HTTP ${answer.status}.`,
     {
-      kind,
+      kind: kind ?? kindForStatus(answer.status),
       provider: profile.provider,
       httpStatus: answer.status,
       providerCode: fields.code,
@@ -131,22 +165,20 @@ export function httpError<P extends ResponsesProvider>(
   );
 }
 
-/** A response whose status is `failed`, which can arrive with HTTP 200. */
+/**
+ * A response whose status is `failed`, or an error body, either of which can
+ * arrive with HTTP 200 once the provider has started answering.
+ */
 export function failedResponseError<P extends ResponsesProvider>(
   profile: ResponsesProfile<P>,
-  error: unknown,
+  body: JsonRecord,
   responseId: string | undefined,
   usage: Usage | undefined,
 ): LlmError {
-  const { fields, detail } = readError({ error });
-  const formatKind = kindForCode(fields.code, fields.type);
-  const reading = formatKind === undefined ? profile.classifyError?.({ ...fields }) : undefined;
-  const kind =
-    formatKind ??
-    reading?.kind ??
-    (fields.code === undefined ? 'provider_error' : 'invalid_request');
-  return new LlmError(fields.message ?? `${profile.label} response failed.`, {
-    kind,
+  const { fields, detail } = readError({ error: body.error });
+  const { reading, kind } = classify(profile, fields, errorInput(fields, body));
+  return new LlmError(reading?.message ?? fields.message ?? `${profile.label} response failed.`, {
+    kind: kind ?? (fields.code === undefined ? 'provider_error' : 'invalid_request'),
     provider: profile.provider,
     providerCode: fields.code,
     providerParam: fields.param ?? reading?.param,
