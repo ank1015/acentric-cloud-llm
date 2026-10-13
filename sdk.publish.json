@@ -1,0 +1,10 @@
+{
+  "source": "packages/sdk",
+  "name": "@acentric-cloud/llm",
+  "version": "0.1.0",
+  "keywords": ["llm", "openai", "anthropic", "fireworks", "openrouter", "gateway", "sdk"],
+  "vendor": {
+    "@acentric-llm/contracts": "packages/contracts",
+    "@acentric-llm/providers": "packages/providers"
+  }
+}

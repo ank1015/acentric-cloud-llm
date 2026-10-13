@@ -129,3 +129,9 @@ test('the direct client runs the adapter in process, with the same shape', async
   assert.equal(outputText(response.message), '');
   assert.ok((await llm.models()).some((model) => model.id === 'gpt-6-luna'));
 });
+
+test('the gateway client defaults to the gateway acentric runs', async () => {
+  const { fetch, sent } = fakeFetch({ models: [] });
+  await createClient({ fetch }).models();
+  assert.equal(sent[0]?.url, 'https://llm.cloud.acentric.dev/v1/models');
+});

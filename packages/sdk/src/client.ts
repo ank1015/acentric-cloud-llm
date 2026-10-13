@@ -9,9 +9,12 @@ import {
 import { callSignal, checkTimeout, prepare } from './prepare.ts';
 import type { CallOptions, LlmClient, SavedCredentials } from './types.ts';
 
+/** The gateway acentric runs. */
+export const DEFAULT_BASE_URL = 'https://llm.cloud.acentric.dev';
+
 export interface ClientOptions<K extends Provider = never> {
-  /** The gateway's origin, e.g. `https://llm.example.com` or `http://localhost:8787`. */
-  readonly baseUrl: string;
+  /** The gateway's origin. Default `DEFAULT_BASE_URL`; e.g. `http://localhost:8787` for a local one. */
+  readonly baseUrl?: string;
   /** Credentials per provider, e.g. keys a user entered once. */
   readonly credentials?: SavedCredentials<K>;
   /** A `fetch` to use instead of the global one. */
@@ -23,8 +26,10 @@ export interface ClientOptions<K extends Provider = never> {
 }
 
 /** A client of the gateway. Stateless: one HTTP request per call, never retried. */
-export function createClient<K extends Provider = never>(options: ClientOptions<K>): LlmClient<K> {
-  const baseUrl = normalizeBaseUrl(options.baseUrl);
+export function createClient<K extends Provider = never>(
+  options: ClientOptions<K> = {},
+): LlmClient<K> {
+  const baseUrl = normalizeBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
   const saved: Partial<SavedCredentials> = options.credentials ?? {};
   checkTimeout(options.timeoutMs);
 

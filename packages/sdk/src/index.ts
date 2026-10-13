@@ -16,5 +16,5 @@ export {
   type TextOptions,
   type ToolResultOptions,
 } from '@acentric-llm/providers';
-export { createClient, type ClientOptions } from './client.ts';
+export { createClient, DEFAULT_BASE_URL, type ClientOptions } from './client.ts';
 export type { CallOptions, CompleteInput, LlmClient, SavedCredentials } from './types.ts';

@@ -11,3 +11,6 @@ package-lock.json
 .wrangler/
 .dev.vars
 .dev.vars.*
+
+# npm staging
+.publish/
