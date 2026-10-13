@@ -42,6 +42,17 @@ const llm = createDirectClient({ credentials: { openai: { apiKey: '...' } } });
 The same client, calling providers from your process with the adapters the
 gateway runs. It bundles every adapter.
 
+## Without fetch: `@acentric-cloud/llm/core`
+
+```ts
+import { toolCalls, toolResult, type AssistantMessage } from '@acentric-cloud/llm/core';
+```
+
+Everything but the clients: the types, `LlmError` and the message helpers
+(`outputText`, `toolCalls`, `pendingToolCalls`, `toolResult`, ...). It needs
+only ECMAScript, so it loads where `fetch` and the DOM are absent, such as the
+pure half of an acentric-cloud agent.
+
 ## Tools
 
 Pass `tools` (`{ type: 'function', name, description, parameters }`) on the

@@ -10,6 +10,11 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./helpers": {
+      "source": "./src/helpers.ts",
+      "types": "./dist/helpers.d.ts",
+      "default": "./dist/helpers.js"
     }
   },
   "files": [

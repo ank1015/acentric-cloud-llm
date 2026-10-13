@@ -9,6 +9,7 @@ import {
   type Message,
 } from '../src/index.ts';
 import { createDirectClient } from '../src/direct.ts';
+import * as core from '../src/core.ts';
 
 const completion = {
   id: 'resp_1',
@@ -134,4 +135,11 @@ test('the gateway client defaults to the gateway acentric runs', async () => {
   const { fetch, sent } = fakeFetch({ models: [] });
   await createClient({ fetch }).models();
   assert.equal(sent[0]?.url, 'https://llm.cloud.acentric.dev/v1/models');
+});
+
+test('the core entry has the helpers and no client', () => {
+  assert.equal(typeof core.toolCalls, 'function');
+  assert.equal(typeof core.toolResult, 'function');
+  assert.equal(typeof core.LlmError, 'function');
+  assert.equal('createClient' in core, false);
 });
